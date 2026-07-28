@@ -9,18 +9,18 @@ import assert from 'node:assert/strict';
 import {
   chunkText,
   estimateTokens,
-} from '../dist/chunking.js';
+} from '../src/chunking.ts';
 
 import {
   l2Normalize,
   l2Norm,
   isNormalized,
-} from '../dist/normalization.js';
+} from '../src/normalization.ts';
 
 import {
   euclideanToPoincare,
   isInPoincareBall,
-} from '../dist/hyperbolic.js';
+} from '../src/hyperbolic.ts';
 
 describe('Chunking', () => {
   test('chunks text', () => {

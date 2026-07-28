@@ -22,7 +22,9 @@ import {
   displayWidth,
   MESSAGES,
   MAX_MESSAGE_COLUMNS,
+  eligibleMessagesFromPools,
 } from '../src/funnel/messages.js';
+import { getRemoteMessages } from '../src/funnel/message-transport.js';
 import {
   selectMessage,
   ROTATION_SLOT_MS,
@@ -191,12 +193,81 @@ describe('message content boundaries (ADR-301)', () => {
     expect(isAllowedUrl('not a url')).toBe(false);
   });
 
-  it('ships ZERO local messages (ADR-311 "zero local promo content" guarantee)', () => {
-    // The in-code MESSAGES pool is intentionally empty — all rotation
-    // content (tips, promos, disclosure) is remote-sourced. This test
-    // pins that guarantee; a future PR that adds a local message back
-    // in must consciously fail this test to do so.
-    expect(MESSAGES).toEqual([]);
+  it('ships a bounded local cold-start seed, not zero (ADR-321 amends the ADR-311 "zero local promo content" guarantee)', () => {
+    // History: commit 6193ab7b6 (2026-07-10) emptied MESSAGES to [] and this
+    // test originally pinned MESSAGES === []. Commit 810b13dcd (2026-07-26,
+    // issue #2787) reintroduced a small local seed because a genuinely fresh
+    // install showed a fully blank promo/disclosure row for every rotation
+    // slot before the first remote fetch succeeded — including blocking the
+    // disclosure gate itself, since disclosure text was ALSO 100% remote.
+    // ADR-321 formalizes that reintroduction as a deliberate, bounded
+    // exception rather than leaving this test failing at HEAD. A future PR
+    // that grows the seed must keep it within the ratio checked below, or
+    // amend ADR-321 consciously.
+    const educational = MESSAGES.filter((m) => m.class === 'educational');
+    const promotional = MESSAGES.filter((m) => m.class === 'promotional');
+    const disclosure = MESSAGES.filter((m) => m.class === 'disclosure');
+
+    // ADR-301's 4-educational-to-1-promotional rotation ratio must hold
+    // within the seed pool on its own — it cannot rely on the remote pool
+    // to dilute an oversized local promotional share.
+    expect(promotional.length).toBe(1);
+    expect(disclosure.length).toBe(1);
+    expect(educational.length).toBeGreaterThanOrEqual(promotional.length * 4);
+
+    // The seed gets no special treatment in the untrusted-content pipeline —
+    // every entry must validate exactly like a remote message would.
+    for (const m of MESSAGES) {
+      expect(isValidMessage(m)).toBe(true);
+    }
+
+    // Structural marker (ADR-321 decision #3): every seed id is
+    // `local.`-prefixed. This is what lets a remote message with the same id
+    // override a seed entry via eligibleMessagesFromPools's remote-wins-by-id
+    // merge — the only mechanism this exception relies on for a seed entry to
+    // ever stop appearing (see the two tests below for what that mechanism
+    // does and does not guarantee).
+    for (const m of MESSAGES) {
+      expect(m.id.startsWith('local.')).toBe(true);
+    }
+  });
+
+  it('a remote message with the same id as a seed entry overrides it (ADR-321 decision #3: remote wins by id)', () => {
+    const remoteOverride = {
+      schemaVersion: 1 as const,
+      id: 'local.promo.cognitum',
+      class: 'promotional' as const,
+      text: '✨ Cognitum • remote-refreshed sponsor message · manage: ruflo settings',
+      url: 'https://cognitum.one',
+    };
+    const merged = eligibleMessagesFromPools(MESSAGES, [remoteOverride]);
+    const promo = merged.find((m) => m.id === 'local.promo.cognitum');
+    expect(promo?.text).toBe(remoteOverride.text); // remote text wins on id collision
+
+    // The override is per-id, not a wholesale replacement of the seed pool —
+    // every other seed entry is still present, untouched.
+    const otherLocalIds = MESSAGES.filter((m) => m.id !== 'local.promo.cognitum').map((m) => m.id);
+    for (const id of otherLocalIds) {
+      expect(merged.some((m) => m.id === id)).toBe(true);
+    }
+  });
+
+  it('honest coverage note: the seed has no time-boxed handoff — it keeps appearing alongside an unrelated-id remote pool, not just during cold start', () => {
+    // ADR-321 is explicit that this is a real gap, not an oversight: the
+    // originating commit message framed the seed as filling "the ≤ 60s
+    // cold-start window before first successful remote fetch," but
+    // eligibleMessagesFromPools has no clock and no "first fetch succeeded"
+    // flag — it is a pure remote-union-local-by-id merge. A live remote feed
+    // whose ids never collide with the local `local.*` ids (the likely case)
+    // leaves the seed in rotation indefinitely, additively, not just during
+    // a bounded cold-start window. This test pins that actual behavior
+    // instead of asserting the un-implemented time-boxed claim.
+    seedRemoteMessages(TEST_ROTATION_POOL); // unrelated ids, no collision with the seed
+    const merged = eligibleMessagesFromPools(MESSAGES, getRemoteMessages());
+    expect(merged.some((m) => m.id === 'local.promo.cognitum')).toBe(true);
+    for (const m of MESSAGES) {
+      expect(merged.some((entry) => entry.id === m.id)).toBe(true);
+    }
   });
 
   it('a disclosure-class message without the manage tail is rejected, never repaired', () => {
@@ -205,33 +276,46 @@ describe('message content boundaries (ADR-301)', () => {
     expect(isValidMessage({ ...base, text: '✨ Has it · manage: ruflo settings' })).toBe(true);
   });
 
-  it('selectDisclosureMessage returns null when no remote disclosure pool is cached (fail-closed)', () => {
-    // No seedRemoteMessages() call — cache is empty, matching a cold start
-    // or an unreachable remote feed. Per ADR-311, this means "show nothing".
-    expect(selectDisclosureMessage(new Date())).toBeNull();
+  it('selectDisclosureMessage falls back to the local cold-start seed when no remote disclosure pool is cached (ADR-321)', () => {
+    // Pre-ADR-321 this asserted null (fail-closed, per the commit-6193ab7b6
+    // "zero local content" guarantee). Since the local seed was reinstated
+    // (commit 810b13dcd, formalized by ADR-321), an unseeded cache — a cold
+    // start or an unreachable remote feed — now resolves to the seed's
+    // single bootstrap disclosure entry instead of leaving the row blank.
+    expect(selectDisclosureMessage(new Date())?.id).toBe('local.disclosure.v1');
   });
 
-  it('selectDisclosureMessage is deterministic per 5-minute slot once seeded', () => {
+  it('selectDisclosureMessage is deterministic per 5-minute slot once seeded, and merges in the local seed disclosure alongside the remote pool', () => {
     seedRemoteMessages(TEST_DISCLOSURE_POOL);
     const t0 = new Date('2026-07-10T12:00:00.000Z');
     const t0plus1s = new Date(t0.getTime() + 1000);
     expect(selectDisclosureMessage(t0)?.id).toBe(selectDisclosureMessage(t0plus1s)?.id);
     const seen = new Set<string>();
-    for (let i = 0; i < TEST_DISCLOSURE_POOL.length * 2; i++) {
+    // +1 for the local seed's 'local.disclosure.v1' entry, which merges in
+    // alongside the 3 remote variants (no id collision) — ADR-321's
+    // remote-union-local-by-id merge, not a remote-only pool.
+    const mergedPoolSize = TEST_DISCLOSURE_POOL.length + 1;
+    for (let i = 0; i < mergedPoolSize * 2; i++) {
       seen.add(selectDisclosureMessage(new Date(t0.getTime() + i * DISCLOSURE_ROTATION_SLOT_MS))?.id ?? '');
     }
-    // Rotation must cover every variant.
-    expect(seen.size).toBe(TEST_DISCLOSURE_POOL.length);
+    // Rotation must cover every variant, remote and local seed alike.
+    expect(seen.size).toBe(mergedPoolSize);
+    expect(seen.has('local.disclosure.v1')).toBe(true);
   });
 });
 
 // ─── ADR-301: rotation ratio ────────────────────────────────────────────────
 
 describe('rotation scheduler (ADR-301 content ratio)', () => {
-  it('returns null when no remote pool is cached (fail-closed, ADR-311)', () => {
-    // No seedRemoteMessages() call — MESSAGES ships empty, so an unseeded
-    // cache means nothing to rotate through. This is deliberate, not a bug.
-    expect(selectMessage(new Date())).toBeNull();
+  it('falls back to the local cold-start seed when no remote pool is cached, instead of returning null (ADR-321)', () => {
+    // Pre-ADR-321: MESSAGES shipped empty (commit 6193ab7b6) and an unseeded
+    // cache meant nothing to rotate through — null, by design. Since the
+    // local seed was reinstated (commit 810b13dcd, formalized by ADR-321),
+    // a cold start now rotates through the local educational/promotional
+    // seed instead of showing nothing.
+    const msg = selectMessage(new Date());
+    expect(msg).not.toBeNull();
+    expect(msg!.id.startsWith('local.')).toBe(true);
   });
 
   it('promotional content appears only in 1-of-5 slots and honors the 30-min cap', () => {
@@ -359,18 +443,29 @@ describe('promo orchestrator (getFunnelPromo)', () => {
     expect(getFunnelPromo({ interactive: true, env: { ...process.env, RUFLO_FUNNEL: '0' } })).toBeNull();
   });
 
-  it('renders nothing on first render when no remote pool is cached (fail-closed, ADR-311)', () => {
-    // No seedRemoteMessages() — this is a cold start or an unreachable API.
-    // Zero local content means zero row, not a fallback to hardcoded text.
-    expect(getFunnelPromo({ interactive: true, cwd: stateDir })).toBeNull();
+  it('first render without a cached remote pool shows the local seed disclosure, not a blank row (ADR-321)', () => {
+    // Pre-ADR-321 this asserted null (commit 6193ab7b6's fail-closed
+    // guarantee: zero local content means zero row). The local cold-start
+    // seed reinstated by commit 810b13dcd (formalized by ADR-321) means the
+    // very first render now shows the bootstrap disclosure text instead.
+    const row = getFunnelPromo({ interactive: true, cwd: stateDir });
+    expect(row).not.toBeNull();
+    expect(row!.kind).toBe('disclosure');
   });
 
   it('first interactive render is the disclosure, never a promotion', () => {
     seedRemoteMessages(TEST_DISCLOSURE_POOL);
-    const row = getFunnelPromo({ interactive: true, cwd: stateDir });
+    // Pin `now` to a slot where the merged disclosure pool (3 remote variants
+    // pushed first by eligibleMessagesFromPools, then the local seed's
+    // 'local.disclosure.v1' appended last, per ADR-321) selects a REMOTE
+    // variant — index 0 of a 4-entry pool, i.e. slot % 4 === 0. This keeps
+    // the click-URL assertions below (which assume a `disclosure-N`-shaped
+    // id) meaningful; the next test covers the local-seed-selected case.
+    const t0 = new Date(0);
+    const row = getFunnelPromo({ interactive: true, cwd: stateDir, now: t0 });
     expect(row).not.toBeNull();
     expect(row!.kind).toBe('disclosure');
-    // Row text is one of the seeded disclosure variants.
+    // Row text is one of the seeded remote disclosure variants.
     expect(TEST_DISCLOSURE_POOL.map((m) => m.text)).toContain(row!.text);
     // The URL is click-tracked (routes through the server redirect) — the
     // real cognitum.one/ruflo target rides in the `to` query param.
@@ -387,6 +482,25 @@ describe('promo orchestrator (getFunnelPromo)', () => {
     expect(parsed.searchParams.get('utm_content')).toMatch(/^disclosure-\d+$/);
     // Without telemetry consent (default in this test suite), no fid rides along.
     expect(parsed.searchParams.get('fid')).toBeNull();
+  });
+
+  it('the merged disclosure pool can also select the local seed entry, which carries no URL at all (ADR-321)', () => {
+    seedRemoteMessages(TEST_DISCLOSURE_POOL);
+    // Pool order is [disclosure-1, disclosure-2, disclosure-3, local.disclosure.v1]
+    // (remote pushed first, local seed appended last, no id collision) — index
+    // 3 of a 4-entry pool, i.e. slot % 4 === 3, selects the local seed entry.
+    const slotForLocalEntry = 3 * DISCLOSURE_ROTATION_SLOT_MS;
+    const row = getFunnelPromo({ interactive: true, cwd: stateDir, now: new Date(slotForLocalEntry) });
+    expect(row).not.toBeNull();
+    expect(row!.kind).toBe('disclosure');
+    const localSeedEntry = MESSAGES.find((m) => m.id === 'local.disclosure.v1')!;
+    expect(row!.text).toBe(localSeedEntry.text);
+    // Unlike the remote-seeded disclosure variants (which carry a
+    // cognitum.one/ruflo url), the local seed disclosure entry has no `url`
+    // field at all — promo.ts only calls clickTrackedUrl when msg.url is
+    // set, so the row's url is undefined rather than a click-redirect link.
+    expect(localSeedEntry.url).toBeUndefined();
+    expect(row!.url).toBeUndefined();
   });
 
   it('keeps showing the disclosure through the grace window, then rotates messages', () => {

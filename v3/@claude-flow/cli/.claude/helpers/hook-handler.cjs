@@ -557,9 +557,17 @@ const handlers = {
 
 // Hooks must ALWAYS exit 0 — Claude Code treats non-zero as "hook error"
 // and skips all subsequent hooks for the event.
-process.exitCode = 0;
-main().catch((e) => {
-  try { console.log(`[WARN] Hook handler error: ${e.message}`); } catch (_) {}
-}).finally(() => {
-  process.exit(0);
-});
+//
+// Only dispatch hooks when run directly (node hook-handler.cjs ...). When
+// require()'d by a test, just expose the internals so they can be unit-tested
+// without triggering stdin reads / process.exit.
+if (require.main === module) {
+  process.exitCode = 0;
+  main().catch((e) => {
+    try { console.log(`[WARN] Hook handler error: ${e.message}`); } catch (_) {}
+  }).finally(() => {
+    process.exit(0);
+  });
+}
+
+module.exports = { runWithTimeout: runWithTimeout, INTELLIGENCE_TIMEOUT_MS: INTELLIGENCE_TIMEOUT_MS };

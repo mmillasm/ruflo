@@ -606,7 +606,12 @@ describe('TopologyManager', () => {
         await topology.addNode(`agent-${i}`, 'peer');
       }
 
-      // Wait for auto-rebalance
+      // Wait past TopologyManager's internal 5000ms rebalance throttle
+      // (topology-manager.ts rebalance(): `if (timeSinceLastRebalance < 5000) return;`)
+      // so the explicit rebalance() call below actually runs instead of
+      // returning early. This intentionally exceeds Vitest's 5000ms default
+      // test timeout, so this test needs its own explicit timeout (10000ms,
+      // matching this package's vitest.config.ts testTimeout).
       await new Promise(resolve => setTimeout(resolve, 6000));
 
       await topology.rebalance();
@@ -616,6 +621,6 @@ describe('TopologyManager', () => {
 
       // Event might not emit if no rebalancing needed
       expect(eventEmitted).toBeDefined();
-    });
+    }, 10000);
   });
 });

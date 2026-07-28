@@ -17,32 +17,62 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 // Mock setup - must be before imports
 // ============================================================================
 
-// Mock fs to prevent actual file I/O during tests
-vi.mock('node:fs', () => {
+// Mock fs to prevent actual file I/O during tests.
+//
+// fs-secure.ts's writeFileAtomic() (issue #2584 crash-safety fix) writes via
+// the raw fd API (openSync/writeSync/fsyncSync/closeSync/renameSync) instead
+// of writeFileSync, so the mock has to support that path too, not just the
+// plain writeFileSync/readFileSync pair. Both the `node:fs` and bare `fs`
+// specifiers are mocked because different source files import one or the
+// other (e.g. fs-secure.ts, session-tools.ts, terminal-tools.ts use
+// `node:fs`; claims-tools.ts, memory-tools.ts, hooks-tools.ts use `fs`).
+function createFsMock() {
   const memStore = new Map<string, string>();
+  const openFiles = new Map<number, { path: string; buffers: Buffer[]; write: boolean }>();
+  let nextFd = 100;
   return {
     existsSync: vi.fn((p: string) => memStore.has(p)),
     readFileSync: vi.fn((p: string) => memStore.get(p) || '{}'),
     writeFileSync: vi.fn((p: string, d: string) => memStore.set(p, d)),
     mkdirSync: vi.fn(),
     readdirSync: vi.fn(() => []),
-    unlinkSync: vi.fn(),
+    unlinkSync: vi.fn((p: string) => {
+      memStore.delete(p);
+    }),
     statSync: vi.fn(() => ({ size: 100, isFile: () => true, isDirectory: () => false })),
+    // Atomic-write primitives used by fs-secure.ts's writeFileAtomic().
+    openSync: vi.fn((p: string, flags?: string) => {
+      const fd = nextFd++;
+      openFiles.set(fd, { path: p, buffers: [], write: (flags ?? 'r').includes('w') });
+      return fd;
+    }),
+    writeSync: vi.fn((fd: number, data: Buffer, offset = 0, length?: number) => {
+      const entry = openFiles.get(fd);
+      const len = length ?? data.length - offset;
+      entry?.buffers.push(Buffer.from(data).subarray(offset, offset + len));
+      return len;
+    }),
+    fsyncSync: vi.fn(),
+    closeSync: vi.fn((fd: number) => {
+      const entry = openFiles.get(fd);
+      if (entry?.write) {
+        memStore.set(entry.path, Buffer.concat(entry.buffers).toString('utf-8'));
+      }
+      openFiles.delete(fd);
+    }),
+    renameSync: vi.fn((oldPath: string, newPath: string) => {
+      if (memStore.has(oldPath)) {
+        memStore.set(newPath, memStore.get(oldPath)!);
+        memStore.delete(oldPath);
+      }
+    }),
+    chmodSync: vi.fn(),
   };
-});
+}
 
-vi.mock('fs', () => {
-  const memStore = new Map<string, string>();
-  return {
-    existsSync: vi.fn((p: string) => memStore.has(p)),
-    readFileSync: vi.fn((p: string) => memStore.get(p) || '{}'),
-    writeFileSync: vi.fn((p: string, d: string) => memStore.set(p, d)),
-    mkdirSync: vi.fn(),
-    readdirSync: vi.fn(() => []),
-    unlinkSync: vi.fn(),
-    statSync: vi.fn(() => ({ size: 100, isFile: () => true, isDirectory: () => false })),
-  };
-});
+vi.mock('node:fs', () => createFsMock());
+
+vi.mock('fs', () => createFsMock());
 
 // Mock child_process for browser/security tools
 vi.mock('child_process', () => ({

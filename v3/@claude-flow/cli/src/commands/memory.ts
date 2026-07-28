@@ -355,9 +355,14 @@ const searchCommand: Command = {
     },
     {
       name: 'threshold',
+      // 0.3 — must stay <= the #2558 recall floor: bridgeSearchEntries
+      // guarantees a full keyword-coverage hit scores blended >= 0.4
+      // (memory-bridge.ts "keyword-coverage floor"), so any default above
+      // 0.4 silently re-breaks keyword recall. Keep this in sync with the
+      // `?? 0.3` fallback in the action below (full history there).
       description: 'Similarity threshold (0-1)',
       type: 'number',
-      default: 0.7
+      default: 0.3
     },
     {
       name: 'type',
@@ -404,13 +409,26 @@ const searchCommand: Command = {
     const query = ctx.flags.query as string || ctx.args[0];
     let namespace = ctx.flags.namespace as string || 'all';
     const limit = ctx.flags.limit as number || 10;
-    // #2790 fix — `||` discards an explicit `--threshold 0` (falsy) and
-    // silently uses the fallback; that made `--threshold 0` return
-    // FEWER results than `--threshold 0.01` (non-monotonic). Nullish
-    // coalescing preserves an explicit zero. Fallback aligned with the
-    // option's declared `default: 0.7` (was `0.3` — the two disagreed
-    // and --help advertised a default the code did not honor).
-    const threshold = ctx.flags.threshold as number ?? 0.7;
+    // #2790 fix (kept) — `||` discards an explicit `--threshold 0` (falsy)
+    // and silently uses the fallback; that made `--threshold 0` return FEWER
+    // results than `--threshold 0.01` (non-monotonic). Nullish coalescing
+    // preserves an explicit zero.
+    //
+    // Default is 0.3, NOT the 0.7 that #2790 briefly adopted. History: the
+    // option's declared `default: 0.7` was dead code from 2026-01-04 until
+    // 8933c6c8c (2026-07-26) made applyDefaults walk subcommand options, so
+    // the operative default for the feature's entire life was this
+    // fallback's 0.3. #2790 (same day) then "reconciled" the fallback UP to
+    // the newly-live 0.7 — a code-vs-help consistency move, not a precision
+    // decision — which silently broke the #2558 recall contract:
+    // bridgeSearchEntries guarantees a full keyword-coverage hit scores
+    // blended >= 0.4 ("#2558: keyword-coverage floor" in memory-bridge.ts),
+    // which clears 0.3 but not 0.7, so default searches recalled NOTHING
+    // for exact keyword matches again. Reconciling DOWN to 0.3 keeps the
+    // declared default, this fallback, and bridgeSearchEntries' own
+    // internal default (0.3) in agreement AND preserves the recall
+    // guarantee. Guard: __tests__/memory-search-recall-2558.test.ts.
+    const threshold = ctx.flags.threshold as number ?? 0.3;
     const searchType = ctx.flags.type as string || 'semantic';
     const buildHnsw = (ctx.flags['build-hnsw'] || ctx.flags.buildHnsw) as boolean;
     const requestedIntent = (ctx.flags.intent as string) || 'mixed';

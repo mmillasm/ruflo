@@ -99,8 +99,11 @@ describe('Neural Tools (neural-tools)', () => {
     // Must be a non-empty string indicating which embedding backend is active
     expect(typeof provider).toBe('string');
     expect(provider.length).toBeGreaterThan(0);
-    // Must match one of the known provider tiers or fallback
-    const knownProviders = /agentic-flow|onnx|mock|hash|fallback|reasoningbank|none/i;
+    // Must match one of the known provider tiers or fallback.
+    // Includes `ruvector` and `wasm-embedder` for the Tier -1/0 real-embedding
+    // paths added by ADR-089 (ruvector@0.2.27 bundled ONNX) after this test
+    // was originally written against the ADR-086/087 tier chain.
+    const knownProviders = /agentic-flow|onnx|mock|hash|fallback|reasoningbank|none|ruvector|wasm-embedder/i;
     expect(provider).toMatch(knownProviders);
   });
 });

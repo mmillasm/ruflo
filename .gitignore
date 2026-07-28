@@ -152,6 +152,14 @@ claude-flow.config.json
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
+
+# AgentDB/RVF lock files are ephemeral OS-level advisory locks (holder pid +
+# timestamp) rewritten by any process that opens the paired .rvf store —
+# including test runs that construct an AgentDB/RuVector vector backend with
+# no explicit storagePath (it defaults to a shared file in the CWD). They
+# carry no reviewable content and should never have been tracked; see Fase
+# 2.2 remediation notes.
+*.rvf.lock
 claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
@@ -190,3 +198,8 @@ v3/@claude-flow/cli/plugins/
 # Cargo build output (v3/crates/ruflo-federation-peer) — pure generated
 # artifact, never source.
 /target/
+
+# Personal /cierre command (OS ULTIMATE BOSS session-close protocol) — contains
+# absolute paths to Matias's personal systems (handoff store, Obsidian vault).
+# Local-only, never publish to this public fork.
+.claude/commands/cierre.md

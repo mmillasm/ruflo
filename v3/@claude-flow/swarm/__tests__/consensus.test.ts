@@ -329,19 +329,25 @@ describe('Byzantine Consensus', () => {
 
       const proposal = await byzantine.propose({ value: 42 });
 
-      // Simulate votes from 3 nodes (2f+1)
-      const vote: ConsensusVote = {
-        voterId: 'node-2',
-        approve: true,
-        confidence: 1.0,
-        timestamp: new Date(),
-      };
+      // Simulate votes from 3 nodes (2f+1) -- with only 1 vote cast, the
+      // proposal never reaches the 2f+1 threshold and awaitConsensus blocks
+      // until the internal timeoutMs (5000ms) elapses, racing vitest's own
+      // 5000ms default test timeout. Casting all 2f+1 votes lets consensus
+      // resolve immediately instead of waiting on the timeout path.
+      for (const voterId of ['node-2', 'node-3', 'node-4']) {
+        const vote: ConsensusVote = {
+          voterId,
+          approve: true,
+          confidence: 1.0,
+          timestamp: new Date(),
+        };
 
-      await byzantine.vote(proposal.id, vote);
+        await byzantine.vote(proposal.id, vote);
+      }
 
-      // Check if we need more votes
       const result = await byzantine.awaitConsensus(proposal.id);
       expect(result.proposalId).toBe(proposal.id);
+      expect(result.approved).toBe(true);
     });
   });
 });

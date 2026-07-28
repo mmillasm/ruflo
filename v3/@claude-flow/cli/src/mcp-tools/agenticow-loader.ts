@@ -94,6 +94,20 @@ export function validateLabel(label: string): string {
 }
 
 /**
+ * Assert that `file` can be opened/created without the agenticow API loaded —
+ * i.e. a usable `dimension` is available whenever neither the file nor its
+ * lineage manifest exists yet. Pure fs check (no package import required) so
+ * callers can validate before the optional-dep load: a malformed call must
+ * fail the same way whether or not `agenticow` happens to be installed —
+ * validation is a boundary concern, not a backend-availability concern.
+ */
+export function assertDimensionAvailable(file: string, dimension?: number): void {
+  if (typeof dimension === 'number' && Number.isInteger(dimension) && dimension > 0) return;
+  if (existsSync(manifestFor(file)) || existsSync(file)) return;
+  throw new Error('dimension is required when creating a new memory file');
+}
+
+/**
  * Open (or create) a memory file, restoring its COW chain from the lineage
  * manifest when one exists. When neither the `.rvf` nor the manifest exists,
  * `dimension` is required to create a fresh base.
@@ -103,11 +117,10 @@ export async function openWithLineage(api: AgenticowApi, file: string, dimension
   if (existsSync(manifest)) {
     return (api.AgenticMemory as any).load(manifest);
   }
+  assertDimensionAvailable(file, dimension);
   const opts: any = {};
   if (typeof dimension === 'number' && Number.isInteger(dimension) && dimension > 0) {
     opts.dimension = dimension;
-  } else if (!existsSync(file)) {
-    throw new Error('dimension is required when creating a new memory file');
   }
   return api.open(file, opts);
 }

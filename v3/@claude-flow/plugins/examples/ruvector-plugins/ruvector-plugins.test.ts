@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { HookEvent } from '../../src/index.js';
 import type {
   ReasoningTrajectory,
   ReasoningStep,
@@ -348,71 +349,81 @@ describe('Plugin Integration Types', () => {
 });
 
 // Plugin metadata tests
+//
+// Contract note (ADR-323): PluginMetadata identifies a plugin by `name`
+// (kebab-case slug — the registry key) and categorizes it via `tags`.
+// The SDK has never had `id`, `capabilities`, or human-readable display
+// names; the original assertions here were written against an API that
+// never existed. These assert the real contract in src/types/index.ts.
 describe('Plugin Metadata', () => {
   it('reasoningBankPlugin should have correct metadata', async () => {
     const { reasoningBankPlugin } = await import('./index.js');
     const metadata = reasoningBankPlugin.metadata;
 
-    expect(metadata.id).toBe('ruvector-reasoning-bank');
-    expect(metadata.name).toBe('RuVector Reasoning Bank');
+    expect(metadata.name).toBe('reasoning-bank');
     expect(metadata.version).toBeDefined();
-    expect(metadata.capabilities).toContain('vector-search');
-    expect(metadata.capabilities).toContain('learning');
+    expect(metadata.tags).toContain('reasoning');
+    expect(metadata.tags).toContain('learning');
   });
 
   it('semanticCodeSearchPlugin should have correct metadata', async () => {
     const { semanticCodeSearchPlugin } = await import('./index.js');
     const metadata = semanticCodeSearchPlugin.metadata;
 
-    expect(metadata.id).toBe('ruvector-semantic-code-search');
-    expect(metadata.name).toBe('RuVector Semantic Code Search');
-    expect(metadata.capabilities).toContain('code-search');
+    expect(metadata.name).toBe('semantic-code-search');
+    expect(metadata.version).toBeDefined();
+    expect(metadata.tags).toContain('search');
+    expect(metadata.tags).toContain('code');
   });
 
   it('sonaLearningPlugin should have correct metadata', async () => {
     const { sonaLearningPlugin } = await import('./index.js');
     const metadata = sonaLearningPlugin.metadata;
 
-    expect(metadata.id).toBe('ruvector-sona-learning');
-    expect(metadata.name).toBe('RuVector SONA Learning');
-    expect(metadata.capabilities).toContain('learning');
-    expect(metadata.capabilities).toContain('adaptation');
+    expect(metadata.name).toBe('sona-learning');
+    expect(metadata.version).toBeDefined();
+    expect(metadata.tags).toContain('learning');
+    expect(metadata.tags).toContain('adaptation');
   });
 
   it('intentRouterPlugin should have correct metadata', async () => {
     const { intentRouterPlugin } = await import('./index.js');
     const metadata = intentRouterPlugin.metadata;
 
-    expect(metadata.id).toBe('ruvector-intent-router');
-    expect(metadata.name).toBe('RuVector Intent Router');
-    expect(metadata.capabilities).toContain('routing');
+    expect(metadata.name).toBe('intent-router');
+    expect(metadata.version).toBeDefined();
+    expect(metadata.tags).toContain('routing');
   });
 
   it('mcpToolOptimizerPlugin should have correct metadata', async () => {
     const { mcpToolOptimizerPlugin } = await import('./index.js');
     const metadata = mcpToolOptimizerPlugin.metadata;
 
-    expect(metadata.id).toBe('ruvector-mcp-tool-optimizer');
-    expect(metadata.name).toBe('RuVector MCP Tool Optimizer');
-    expect(metadata.capabilities).toContain('optimization');
+    expect(metadata.name).toBe('mcp-tool-optimizer');
+    expect(metadata.version).toBeDefined();
+    expect(metadata.tags).toContain('optimization');
   });
 
   it('hookPatternLibraryPlugin should have correct metadata', async () => {
     const { hookPatternLibraryPlugin } = await import('./index.js');
     const metadata = hookPatternLibraryPlugin.metadata;
 
-    expect(metadata.id).toBe('ruvector-hook-pattern-library');
-    expect(metadata.name).toBe('RuVector Hook Pattern Library');
-    expect(metadata.capabilities).toContain('hooks');
-    expect(metadata.capabilities).toContain('patterns');
+    expect(metadata.name).toBe('hook-pattern-library');
+    expect(metadata.version).toBeDefined();
+    expect(metadata.tags).toContain('hooks');
+    expect(metadata.tags).toContain('patterns');
   });
 });
 
 // MCP Tool definitions tests
+//
+// Contract note (ADR-323): IPlugin exposes tools via the registration
+// method `registerMCPTools()`, not a `.tools` property. This is how the
+// plugin registries (src/registry/*) collect tools in production.
 describe('MCP Tool Definitions', () => {
   it('reasoningBankPlugin should define expected tools', async () => {
     const { reasoningBankPlugin } = await import('./index.js');
-    const tools = reasoningBankPlugin.tools || [];
+    const tools = reasoningBankPlugin.registerMCPTools?.() ?? [];
     const toolNames = tools.map((t) => t.name);
 
     expect(toolNames).toContain('reasoning-store');
@@ -424,7 +435,7 @@ describe('MCP Tool Definitions', () => {
 
   it('semanticCodeSearchPlugin should define expected tools', async () => {
     const { semanticCodeSearchPlugin } = await import('./index.js');
-    const tools = semanticCodeSearchPlugin.tools || [];
+    const tools = semanticCodeSearchPlugin.registerMCPTools?.() ?? [];
     const toolNames = tools.map((t) => t.name);
 
     expect(toolNames).toContain('code-index');
@@ -435,7 +446,7 @@ describe('MCP Tool Definitions', () => {
 
   it('sonaLearningPlugin should define expected tools', async () => {
     const { sonaLearningPlugin } = await import('./index.js');
-    const tools = sonaLearningPlugin.tools || [];
+    const tools = sonaLearningPlugin.registerMCPTools?.() ?? [];
     const toolNames = tools.map((t) => t.name);
 
     expect(toolNames).toContain('sona-learn');
@@ -446,7 +457,7 @@ describe('MCP Tool Definitions', () => {
 
   it('intentRouterPlugin should define expected tools', async () => {
     const { intentRouterPlugin } = await import('./index.js');
-    const tools = intentRouterPlugin.tools || [];
+    const tools = intentRouterPlugin.registerMCPTools?.() ?? [];
     const toolNames = tools.map((t) => t.name);
 
     expect(toolNames).toContain('intent-route');
@@ -456,7 +467,7 @@ describe('MCP Tool Definitions', () => {
 
   it('mcpToolOptimizerPlugin should define expected tools', async () => {
     const { mcpToolOptimizerPlugin } = await import('./index.js');
-    const tools = mcpToolOptimizerPlugin.tools || [];
+    const tools = mcpToolOptimizerPlugin.registerMCPTools?.() ?? [];
     const toolNames = tools.map((t) => t.name);
 
     expect(toolNames).toContain('tool-optimize');
@@ -466,7 +477,7 @@ describe('MCP Tool Definitions', () => {
 
   it('hookPatternLibraryPlugin should define expected tools', async () => {
     const { hookPatternLibraryPlugin } = await import('./index.js');
-    const tools = hookPatternLibraryPlugin.tools || [];
+    const tools = hookPatternLibraryPlugin.registerMCPTools?.() ?? [];
     const toolNames = tools.map((t) => t.name);
 
     expect(toolNames).toContain('hook-recommend');
@@ -476,43 +487,50 @@ describe('MCP Tool Definitions', () => {
 });
 
 // Hook definitions tests
+//
+// Contract note (ADR-323): IPlugin exposes hooks via `registerHooks()`, not
+// a `.hooks` property, and HookDefinition.event carries HookEvent enum
+// values (e.g. 'hook:post-task-complete'), not PascalCase member names.
+// The original test also asserted 'PostToolCall', which has never been a
+// HookEvent member (the real event is PostToolUse), and expected file
+// operation hooks from hookPatternLibraryPlugin that were only ever seed
+// DATA inside its pattern library — the plugin registers a single
+// PostToolUse recording hook.
 describe('Hook Definitions', () => {
   it('reasoningBankPlugin should define learning hooks', async () => {
     const { reasoningBankPlugin } = await import('./index.js');
-    const hooks = reasoningBankPlugin.hooks || [];
+    const hooks = reasoningBankPlugin.registerHooks?.() ?? [];
 
     expect(hooks.length).toBeGreaterThan(0);
     const hookEvents = hooks.map((h) => h.event);
-    expect(hookEvents).toContain('PostTaskComplete');
+    expect(hookEvents).toContain(HookEvent.PostTaskComplete);
   });
 
   it('intentRouterPlugin should define routing hooks', async () => {
     const { intentRouterPlugin } = await import('./index.js');
-    const hooks = intentRouterPlugin.hooks || [];
+    const hooks = intentRouterPlugin.registerHooks?.() ?? [];
 
     expect(hooks.length).toBeGreaterThan(0);
     const hookEvents = hooks.map((h) => h.event);
-    expect(hookEvents).toContain('PreTaskExecute');
+    expect(hookEvents).toContain(HookEvent.PreTaskExecute);
   });
 
   it('mcpToolOptimizerPlugin should define optimization hooks', async () => {
     const { mcpToolOptimizerPlugin } = await import('./index.js');
-    const hooks = mcpToolOptimizerPlugin.hooks || [];
+    const hooks = mcpToolOptimizerPlugin.registerHooks?.() ?? [];
 
     expect(hooks.length).toBeGreaterThan(0);
     const hookEvents = hooks.map((h) => h.event);
-    expect(hookEvents).toContain('PostToolCall');
-    expect(hookEvents).toContain('PostTaskComplete');
+    expect(hookEvents).toContain(HookEvent.PostToolUse);
+    expect(hookEvents).toContain(HookEvent.PostTaskComplete);
   });
 
-  it('hookPatternLibraryPlugin should define file operation hooks', async () => {
+  it('hookPatternLibraryPlugin should define pattern-recording hooks', async () => {
     const { hookPatternLibraryPlugin } = await import('./index.js');
-    const hooks = hookPatternLibraryPlugin.hooks || [];
+    const hooks = hookPatternLibraryPlugin.registerHooks?.() ?? [];
 
     expect(hooks.length).toBeGreaterThan(0);
     const hookEvents = hooks.map((h) => h.event);
-    expect(hookEvents).toContain('PreFileWrite');
-    expect(hookEvents).toContain('PostFileWrite');
-    expect(hookEvents).toContain('PreCommand');
+    expect(hookEvents).toContain(HookEvent.PostToolUse);
   });
 });

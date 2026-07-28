@@ -5,6 +5,7 @@
  */
 
 import type { ConfigTomlOptions, McpServerConfig, SkillConfig, ConfigProfile } from '../types.js';
+import { getRufloMcpServerConfig, renderMcpServerToml } from '../mcp-config.js';
 
 /**
  * Security configuration options
@@ -541,8 +542,15 @@ enabled = true
 
 /**
  * Generate CI/CD config.toml
+ *
+ * Accepts an optional `platform` so the generated Ruflo MCP server entry
+ * uses the same Windows-safe command/args shape (via getRufloMcpServerConfig /
+ * renderMcpServerToml) already applied in migrations/index.ts, instead of a
+ * separately hardcoded npx invocation that never worked reliably on win32.
  */
-export async function generateCIConfigToml(): Promise<string> {
+export async function generateCIConfigToml(platform: NodeJS.Platform = process.platform): Promise<string> {
+  const mcpServerToml = renderMcpServerToml(getRufloMcpServerConfig(platform, 300)).join('\n');
+
   return `# =============================================================================
 # Claude Flow V3 - CI/CD Pipeline Configuration
 # =============================================================================
@@ -565,11 +573,7 @@ remote_compaction = false
 child_agents_md = true
 request_rule = false
 
-[mcp_servers.ruflo]
-command = "npx"
-args = ["-y", "--package=@claude-flow/cli@latest", "claude-flow-mcp"]
-enabled = true
-tool_timeout_sec = 300
+${mcpServerToml}
 
 [history]
 persistence = "none"

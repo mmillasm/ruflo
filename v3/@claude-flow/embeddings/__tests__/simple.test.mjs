@@ -6,11 +6,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Import directly from compiled dist
+// Import directly from source (tsx transpiles on the fly; avoids depending
+// on a pre-built dist/, which is gitignored and not present in a fresh
+// checkout/CI — see minimal.test.mjs for the same pattern)
 import {
   chunkText,
   estimateTokens,
-} from '../dist/chunking.js';
+} from '../src/chunking.ts';
 
 import {
   l2Normalize,
@@ -19,7 +21,7 @@ import {
   zScoreNormalize,
   l2Norm,
   isNormalized,
-} from '../dist/normalization.js';
+} from '../src/normalization.ts';
 
 import {
   euclideanToPoincare,
@@ -28,14 +30,14 @@ import {
   mobiusAdd,
   isInPoincareBall,
   batchEuclideanToPoincare,
-} from '../dist/hyperbolic.js';
+} from '../src/hyperbolic.ts';
 
 import {
   cosineSimilarity,
   euclideanDistance,
   dotProduct,
   MockEmbeddingService,
-} from '../dist/embedding-service.js';
+} from '../src/embedding-service.ts';
 
 // =============================================================================
 // Chunking Tests

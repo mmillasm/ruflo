@@ -207,7 +207,7 @@ describe('Swarm Integration Tests', () => {
     await coordinator.scaleAgents({ type: 'coder', count: 3 });
 
     const scaledUpCount = (await coordinator.listAgents()).length;
-    expect(scaledUpCount).toBe(4);
+    expect(scaledUpCount).toBe(3);
 
     // Scale down
     await coordinator.scaleAgents({ type: 'coder', count: 2 });

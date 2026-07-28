@@ -90,7 +90,8 @@ describe('Docker Compose Configuration', () => {
   });
 
   it('mongodb exposes port 27017', () => {
-    expect(composeContent).toMatch(/"27017:27017"/);
+    // ADR-166 §6 Phase 2b: bound to loopback only, not published to all interfaces
+    expect(composeContent).toMatch(/"127\.0\.0\.1:27017:27017"/);
   });
 
   it('mongodb has a named volume for data persistence', () => {
@@ -103,7 +104,8 @@ describe('Docker Compose Configuration', () => {
   });
 
   it('mcp-bridge publishes port 3001', () => {
-    expect(composeContent).toMatch(/"3001:3001"/);
+    // ADR-166 §6 Phase 2b: bound to loopback only, not published to all interfaces
+    expect(composeContent).toMatch(/"127\.0\.0\.1:3001:3001"/);
   });
 
   it('mcp-bridge has a healthcheck', () => {
@@ -145,7 +147,9 @@ describe('Docker Compose Configuration', () => {
 
   it('chat-ui injects DOTENV_LOCAL with required env vars', () => {
     expect(composeContent).toContain('DOTENV_LOCAL');
-    expect(composeContent).toContain('MONGODB_URL=mongodb://mongodb:27017');
+    // ADR-166 §6 Phase 2b: MongoDB auth is on by default, so MONGODB_URL now
+    // carries credentials (root user/pass) ahead of the mongodb:27017 host.
+    expect(composeContent).toMatch(/MONGODB_URL=mongodb:\/\/.*@mongodb:27017\//);
     expect(composeContent).toContain('PUBLIC_APP_NAME');
     expect(composeContent).toContain('OPENAI_BASE_URL=http://mcp-bridge:3001');
   });
@@ -612,7 +616,8 @@ describe('Cross-Service Port Consistency', () => {
     const dockerfile = readFile(MCP_BRIDGE_DOCKERFILE);
     const compose = readFile(COMPOSE_PATH);
     expect(dockerfile).toContain('EXPOSE 3001');
-    expect(compose).toContain('"3001:3001"');
+    // ADR-166 §6 Phase 2b: published port is loopback-bound
+    expect(compose).toContain('"127.0.0.1:3001:3001"');
   });
 
   it('nginx Dockerfile EXPOSE matches compose published port', () => {

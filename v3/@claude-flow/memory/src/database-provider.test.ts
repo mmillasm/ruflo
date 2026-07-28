@@ -8,30 +8,41 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createDatabase, getPlatformInfo, getAvailableProviders } from './database-provider.js';
 import { generateMemoryId, createDefaultEntry } from './types.js';
 import { unlinkSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 describe('DatabaseProvider', () => {
-  const testDbPath = './test-database-provider.db';
+  // Regression guard: this MUST resolve outside the repo tree. The 'auto'
+  // provider selection path (see database-provider.ts's 'rvf' case) derives
+  // a sibling `.rvf` file from this path via `path.replace(/\.(db|json)$/,
+  // '.rvf')` — a relative path here leaked `test-database-provider.rvf` into
+  // the repo root (untracked, surfaced by `git status` after `npm run
+  // test:all`). Using os.tmpdir() keeps every file this test touches
+  // (`.db` and the derived `.rvf`) out of the working tree entirely.
+  const testDbPath = join(tmpdir(), `test-database-provider-${process.pid}.db`);
+  // Sibling `.rvf` derived by the 'auto'/'rvf' provider path (see comment above).
+  const testRvfPath = testDbPath.replace(/\.db$/, '.rvf');
+
+  const cleanupTestFiles = (): void => {
+    for (const p of [testDbPath, testRvfPath]) {
+      if (existsSync(p)) {
+        try {
+          unlinkSync(p);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    }
+  };
 
   beforeEach(() => {
     // Ensure clean state before each test
-    if (existsSync(testDbPath)) {
-      try {
-        unlinkSync(testDbPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
+    cleanupTestFiles();
   });
 
   afterEach(() => {
     // Cleanup test database
-    if (existsSync(testDbPath)) {
-      try {
-        unlinkSync(testDbPath);
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
+    cleanupTestFiles();
   });
 
   describe('Platform Detection', () => {

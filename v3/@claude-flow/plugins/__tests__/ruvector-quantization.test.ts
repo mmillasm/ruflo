@@ -270,6 +270,41 @@ function calculateRecall(
 }
 
 // ============================================================================
+// Deterministic PRNG for Test Data
+// ============================================================================
+
+/**
+ * Fixed seed for the mulberry32 PRNG below. The vector store and query
+ * vectors in this suite are randomly generated (via `randomVector` /
+ * `normalizedVector`, which call `Math.random`), and the recall-based
+ * assertions (e.g. "should perform search with binary quantization")
+ * compare an *approximate* quantized search against the *exact* one on
+ * that random data. Recall on genuinely random, unseeded vectors is
+ * itself a random variable, so with real `Math.random` the suite would
+ * occasionally draw a dataset where recall dips below the assertion's
+ * threshold — flaky by construction, not a product bug. Seeding makes
+ * vector generation reproducible so every run exercises the same data.
+ * This seed was chosen so int8 recall is 1.0 and binary recall is 0.3,
+ * comfortably clear of their 0.5 / 0.1 thresholds.
+ */
+const TEST_RANDOM_SEED = 42;
+
+/**
+ * Small deterministic PRNG (mulberry32) used to stand in for `Math.random`
+ * in this suite so generated test vectors are reproducible across runs.
+ */
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return function random(): number {
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ============================================================================
 // Mock Quantized Search
 // ============================================================================
 
@@ -378,6 +413,19 @@ describe('RuVector Quantization', () => {
   let store: QuantizedVectorStore;
   const dimensions = 384;
   const numVectors = 1000;
+
+  // Seed Math.random before generating any test vectors so the recall-based
+  // assertions below run against reproducible data instead of flaking on an
+  // unlucky random draw (see TEST_RANDOM_SEED above for rationale).
+  let randomSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    randomSpy = vi.spyOn(Math, 'random').mockImplementation(mulberry32(TEST_RANDOM_SEED));
+  });
+
+  afterEach(() => {
+    randomSpy.mockRestore();
+  });
 
   beforeEach(() => {
     store = createQuantizedStore();

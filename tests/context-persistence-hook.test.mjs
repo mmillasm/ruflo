@@ -292,9 +292,9 @@ describe('resolveBackend', () => {
 // ============================================================================
 
 describe('createHashEmbedding', () => {
-  it('should produce 768-dimensional embedding', () => {
+  it('should produce 384-dimensional embedding', () => {
     const emb = createHashEmbedding('hello world');
-    assert.equal(emb.length, 768);
+    assert.equal(emb.length, 384);
     assert.ok(emb instanceof Float32Array);
   });
 

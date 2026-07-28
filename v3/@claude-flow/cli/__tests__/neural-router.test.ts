@@ -944,7 +944,7 @@ describe('ModelRouter integration (ADR-148)', () => {
     expect(constrained!.alternatives.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('embedTaskWithCacheBatch matches single-call results + amortizes setup (ADR-149 iter 11)', async () => {
+  it('embedTaskWithCacheBatch near-parity with single-call + amortizes setup (ADR-149 iter 11, ADR-322)', async () => {
     const { embedTaskWithCache, embedTaskWithCacheBatch, __resetTaskEmbedderForTests, embedderStats } = await import('../src/ruvector/task-embedder.js');
     __resetTaskEmbedderForTests();
     const tasks = ['task one', 'task two', 'task three'];
@@ -953,12 +953,28 @@ describe('ModelRouter integration (ADR-148)', () => {
     __resetTaskEmbedderForTests();
     const batch = await embedTaskWithCacheBatch(tasks);
     expect(batch.length).toBe(3);
-    // Batch results should equal single-call results
+    // ADR-322: bit-exact parity between the single and batch paths is NOT
+    // achievable with the quantized MiniLM model. Dynamic per-tensor
+    // quantization computes activation scales over the whole batch tensor,
+    // so a multi-sequence batch quantizes differently than each sequence
+    // alone (measured on these inputs: cosine 0.9847–0.9901, maxAbsDiff
+    // ≤ 0.027; equal-length batches diverge too, so padding is not the
+    // cause — batch-of-one IS bit-exact). Each path is deterministic in
+    // isolation. The contract is therefore near-parity: same semantic
+    // embedding, not same bits. Threshold 0.95 separates correct pairing
+    // (≥ 0.984 measured) from an index-swap bug (inter-task cosine ≤ 0.86
+    // measured on these inputs) and from slicing/normalization bugs
+    // (cosine ≈ 0 or norm ≠ 1).
+    const dot = (a: number[], b: number[]) => a.reduce((s, v, i) => s + v * b[i], 0);
     for (let i = 0; i < 3; i++) {
       expect(batch[i]).toBeDefined();
       expect(batch[i]!.length).toBe(single[i]!.length);
-      // Float comparison — same input via the same pipeline should be deterministic
-      expect(batch[i]!.slice(0, 4)).toEqual(single[i]!.slice(0, 4));
+      // Both paths L2-normalize — catches mis-slicing / normalize regressions
+      // that a cosine check alone would miss.
+      expect(Math.sqrt(dot(batch[i]!, batch[i]!))).toBeCloseTo(1, 3);
+      // Near-parity with the single-call embedding of the SAME task
+      // (vectors are unit-norm, so the dot product is the cosine).
+      expect(dot(batch[i]!, single[i]!)).toBeGreaterThanOrEqual(0.95);
     }
     // Counters reflect 3 misses (cold), 0 hits
     const s = embedderStats();

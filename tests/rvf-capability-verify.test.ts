@@ -3,7 +3,7 @@
  *
  * Tests EVERY capability across all RVF modules to confirm 100% functionality:
  * 1. RvfBackend — IMemoryBackend contract (17 methods)
- * 2. HnswLite — Vector search (add, remove, search, metrics)
+ * 2. HNSWIndex — Vector search via the public HNSW surface (ADR-125)
  * 3. RvfEventLog — Append-only event sourcing
  * 4. RvfEmbeddingCache — Binary file cache with LRU/TTL
  * 5. RvfEmbeddingService — Hash-based embedding generation
@@ -27,7 +27,11 @@ import { tmpdir } from 'node:os';
 // --- Module Imports ---
 import { RvfBackend } from '../v3/@claude-flow/memory/src/rvf-backend.js';
 import type { RvfBackendConfig } from '../v3/@claude-flow/memory/src/rvf-backend.js';
-import { HnswLite, cosineSimilarity } from '../v3/@claude-flow/memory/src/hnsw-lite.js';
+// ADR-125 Phase 3 deleted `hnsw-lite.ts` (its brute-force-degrading helper is
+// now private to rvf-backend.ts). The public vector-search surface is
+// `HNSWIndex`; `cosineSimilarity` moved to `@claude-flow/embeddings`.
+import { HNSWIndex } from '../v3/@claude-flow/memory/src/hnsw-index.js';
+import { cosineSimilarity } from '../v3/@claude-flow/embeddings/src/embedding-service.js';
 import { RvfEventLog } from '../v3/@claude-flow/shared/src/events/rvf-event-log.js';
 import { RvfEmbeddingCache } from '../v3/@claude-flow/embeddings/src/rvf-embedding-cache.js';
 import { RvfEmbeddingService } from '../v3/@claude-flow/embeddings/src/rvf-embedding-service.js';
@@ -192,51 +196,63 @@ describe('1. RvfBackend — IMemoryBackend Contract', () => {
 });
 
 // =============================================================================
-// 2. HnswLite — Vector Search
+// 2. HNSWIndex — Vector Search (public HNSW surface per ADR-125)
 // =============================================================================
-describe('2. HnswLite — Vector Search', () => {
-  it('add + search (cosine)', () => {
-    const hnsw = new HnswLite(4, 8, 50, 'cosine');
+// Formerly exercised the deleted `HnswLite` helper. Rewritten against the
+// canonical async `HNSWIndex` API. Note: HNSWIndex returns DISTANCES (lower is
+// closer), not similarity scores — cosine distance = 1 - cosineSimilarity.
+describe('2. HNSWIndex — Vector Search', () => {
+  const config = { dimensions: 4, M: 8, efConstruction: 50 } as const;
+
+  it('addPoint + search (cosine)', async () => {
+    const hnsw = new HNSWIndex({ ...config, metric: 'cosine' });
     const v1 = new Float32Array([1, 0, 0, 0]);
     const v2 = new Float32Array([0, 1, 0, 0]);
     const v3 = new Float32Array([0.9, 0.1, 0, 0]);
-    hnsw.add('a', v1);
-    hnsw.add('b', v2);
-    hnsw.add('c', v3);
+    await hnsw.addPoint('a', v1);
+    await hnsw.addPoint('b', v2);
+    await hnsw.addPoint('c', v3);
     assert.equal(hnsw.size, 3);
 
-    const results = hnsw.search(v1, 2);
-    assert.equal(results[0].id, 'a'); // exact match
+    const results = await hnsw.search(v1, 2);
+    assert.equal(results[0].id, 'a'); // exact match — smallest distance
+    assert.ok(results[0].distance < 0.001);
   });
 
-  it('remove', () => {
-    const hnsw = new HnswLite(4, 8, 50, 'cosine');
-    hnsw.add('x', new Float32Array([1, 0, 0, 0]));
-    hnsw.remove('x');
+  it('removePoint', async () => {
+    const hnsw = new HNSWIndex({ ...config, metric: 'cosine' });
+    await hnsw.addPoint('x', new Float32Array([1, 0, 0, 0]));
+    assert.equal(await hnsw.removePoint('x'), true);
     assert.equal(hnsw.size, 0);
+    assert.equal(await hnsw.removePoint('x'), false); // already removed
   });
 
-  it('threshold filtering', () => {
-    const hnsw = new HnswLite(4, 8, 50, 'cosine');
-    hnsw.add('a', new Float32Array([1, 0, 0, 0]));
-    hnsw.add('b', new Float32Array([0, 1, 0, 0])); // orthogonal
-    const results = hnsw.search(new Float32Array([1, 0, 0, 0]), 10, 0.5);
-    assert.equal(results.length, 1); // only 'a' passes threshold
+  it('distance-threshold filtering', async () => {
+    const hnsw = new HNSWIndex({ ...config, metric: 'cosine' });
+    await hnsw.addPoint('a', new Float32Array([1, 0, 0, 0]));
+    await hnsw.addPoint('b', new Float32Array([0, 1, 0, 0])); // orthogonal → distance ~1
+    const results = await hnsw.search(new Float32Array([1, 0, 0, 0]), 10);
+    // The old HnswLite threshold=0.5 (similarity) maps to distance < 0.5.
+    const close = results.filter(r => r.distance < 0.5);
+    assert.equal(close.length, 1); // only 'a' is close enough
+    assert.equal(close[0].id, 'a');
   });
 
-  it('dot + euclidean metrics', () => {
-    const dot = new HnswLite(4, 8, 50, 'dot');
-    dot.add('a', new Float32Array([1, 0, 0, 0]));
-    const r1 = dot.search(new Float32Array([1, 0, 0, 0]), 1);
-    assert.ok(r1[0].score > 0);
+  it('dot + euclidean metrics', async () => {
+    const dot = new HNSWIndex({ ...config, metric: 'dot' });
+    await dot.addPoint('a', new Float32Array([1, 0, 0, 0]));
+    const r1 = await dot.search(new Float32Array([1, 0, 0, 0]), 1);
+    // dot distance is -dotProduct: identical unit vectors → -1
+    assert.ok(Math.abs(r1[0].distance - -1) < 0.001);
 
-    const euc = new HnswLite(4, 8, 50, 'euclidean');
-    euc.add('a', new Float32Array([1, 0, 0, 0]));
-    const r2 = euc.search(new Float32Array([1, 0, 0, 0]), 1);
-    assert.ok(r2[0].score > 0);
+    const euc = new HNSWIndex({ ...config, metric: 'euclidean' });
+    await euc.addPoint('a', new Float32Array([1, 0, 0, 0]));
+    const r2 = await euc.search(new Float32Array([1, 0, 0, 0]), 1);
+    // euclidean distance to itself is 0
+    assert.ok(r2[0].distance < 0.001);
   });
 
-  it('cosineSimilarity function', () => {
+  it('cosineSimilarity (from @claude-flow/embeddings per ADR-125)', () => {
     const a = new Float32Array([1, 0]);
     const b = new Float32Array([1, 0]);
     assert.ok(Math.abs(cosineSimilarity(a, b) - 1.0) < 0.001);

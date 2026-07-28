@@ -82,6 +82,11 @@ async function loadEmbedder(): Promise<EmbedFn | null> {
  * pipeline with `loadEmbedder` so cold-load cost is paid once across
  * single + batch usage. Measured speedup: ~1.83× on 30-task batches
  * against the same-pipeline single-call loop.
+ *
+ * NOTE (ADR-322): with the quantized model, a multi-sequence batch does
+ * NOT produce bit-identical vectors to per-text single calls — dynamic
+ * per-tensor quantization computes activation scales over the whole batch
+ * tensor. See `embedTaskWithCacheBatch`'s parity contract.
  */
 async function loadEmbedderBatch(): Promise<EmbedBatchFn | null> {
   const ex = await loadExtractor();
@@ -173,6 +178,17 @@ export async function embedTaskWithCache(task: string): Promise<number[] | undef
  * @xenova/transformers' array-input mode, amortizing tensor setup +
  * model-load overhead across the batch. Order of the output array
  * matches the input order.
+ *
+ * Parity contract (ADR-322): embeddings from this batch path are
+ * NEAR-identical — not bit-identical — to `embedTaskWithCache` for the
+ * same text. The quantized MiniLM model uses dynamic per-tensor
+ * quantization, so activation scales are computed over the whole batch
+ * tensor and differ from the single-sequence run (measured cosine
+ * ≥ 0.984, maxAbsDiff ≤ 0.027 at batch N=3; equal-length batches diverge
+ * too, so padding is not the cause). Each path is deterministic in
+ * isolation, and the LRU stores whichever variant was computed first —
+ * both are equally valid for KNN routing, where this divergence is far
+ * below inter-task distances.
  *
  * Returns `undefined` for any task that failed to embed (missing dep,
  * runtime error). Cache state updates as if each task had been called
