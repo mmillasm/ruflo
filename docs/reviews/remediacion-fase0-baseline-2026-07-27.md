@@ -187,6 +187,119 @@ Más huérfanos de los que el plan original identificó:
 - `v3/@claude-flow/plugins/examples/ruvector/` — ejemplos contra una interfaz sin implementación real.
 - `v3/@claude-flow/memory/benchmarks/longmemeval/adapters/baseline-adapter.ts` — referencia una clase (`OnnxEmbedder`) que nunca se creó.
 
+## Fase 2 — Resultados parciales (2026-07-28, sesión siguiente)
+
+Contexto: el trabajo se movió al fork propio `github.com/mmillasm/ruflo` (Actions
+desactivadas). Antes de arrancar Fase 2 se sincronizó con los 3 commits nuevos de
+upstream (ADR-320 MCP Composition Inspector v2, fix de reader/writer stores, bump a
+3.32.23). El merge no generó conflictos y no introdujo errores de tsc.
+
+### Progreso medido
+
+| Métrica | Línea base F0 | Post-merge | Tras Fase 2 (parcial) |
+|---|---:|---:|---:|
+| Archivos fallidos | 81 | 83 | **19** |
+| Tests fallidos | 206 | 217 | **48** |
+| Timeouts | — | 478 | **4** |
+| Duración | 90 s | 439 s | **~64 s** |
+
+### Causas raíz encontradas
+
+**1. El suite no era determinista** (commit `6f2e4f873`)
+
+No existía **ninguna** config de Vitest en la raíz: `npx vitest run` corría con el glob
+por defecto sobre todo el árbol. Al excluir el ruido, el conteo de tests fallidos
+*subió* de 217 a 327 con 478 timeouts — pero los mismos archivos en aislamiento pasan
+133/133 en 3.9 s. Era contención de CPU: suites deliberadamente lentas (bcrypt,
+algoritmos neurales, benchmarks de flash-attention) excediendo el timeout de 5 s
+peleando por 5 performance cores.
+
+El conteo de fallas era función de la carga de la máquina, no del código — inservible
+como línea base. Se acotó `maxWorkers: 5` en vez de subir `testTimeout`, para que una
+suite que cuelgue de verdad siga siendo visible. Efecto: timeouts 478 → 4, duración
+439 s → 63 s.
+
+**2. Runner y loader equivocados** (commit `e73eb19cb`)
+
+Los 5 archivos de `v3/__tests__/appliance/` usan `node:test` (Vitest nunca los colecta:
+"No test suite found") **e** importan sus sujetos con especificador ESM `.js` que
+resuelve a un `.ts` sin compilar. Con `tsx --test` pasan **134/134**.
+
+> **Corrección a una medición previa de esta misma sesión.** Se reportó que los archivos
+> `node:test` daban "95 pass / 15 fail" y que esas 15 eran fallas genuinas. Era
+> incorrecto: la medición usó `node --test` **sin** loader de TypeScript, así que la
+> mayoría eran `ERR_MODULE_NOT_FOUND`. Medición correcta con `tsx --test`:
+> **442 pass / 9 fail** de 451.
+
+**3. `@claude-flow/cli-core` nunca se compilaba** (commit `3fc864950`) — la más
+importante
+
+`build:ts` compilaba solo el CLI (`cd v3/@claude-flow/cli && npm run build`), dejando
+`cli-core/dist` inexistente. Como el CLI importa `cli-core/dist/src/output.js` en
+runtime, **cualquier** comando moría con `ERR_MODULE_NOT_FOUND`. 8 archivos de test que
+hacen shell-out a `bin/cli.js` heredaban la falla completa.
+
+Distinto del fix de Fase 1: aquel logró que el CLI **type-checkeara** (faltaba
+`@types/node`); este que **ejecute**. Un paquete puede compilar limpio y ser
+inejecutable si su dependencia workspace no está construida. El síntoma llevaba tiempo
+visible — `pnpm install` avisaba del `.bin` roto en cada corrida.
+
+Fix: `cd v3 && pnpm --filter @claude-flow/cli... build` (el sufijo `...` construye las
+dependencias en orden topológico). Documentado en `v3/CLAUDE.md`.
+
+**4. `v3/plugins/*` — excluidos por consistencia con Fase 1**
+
+Los 10 archivos que fallaban pertenecen exactamente a los paquetes ya excluidos del
+build gate: no figuran en `v3/pnpm-workspace.yaml` (que solo globea `@claude-flow/*`),
+`pnpm install` nunca los instala. Sus tests fallan porque el código está a medio
+implementar — verificado en `code-intelligence`: el test importa `getTool`/`getToolNames`
+y ninguno existe en `src/`; el módulo exporta `toolHandlers` (un Map) y
+`createToolContext`. Misma forma que `plugins/examples/ruvector/`. Hacerlos pasar
+exigiría inventar la API faltante: decisión de diseño, no fix de test. Destino en Fase 4.6.
+
+### Invocación canónica resultante
+
+```bash
+npm test -- run        # Vitest (config raíz nueva, concurrencia acotada)
+npm run test:node      # tsx --test — los node:test, incluido appliance/
+npm run test:supply-chain  # check operacional de supply chain
+npm run test:all       # los dos primeros encadenados
+```
+
+### Los 19 archivos que quedan
+
+Ya sin patrón común. Causas identificadas por frecuencia de error:
+
+| Causa | Archivos |
+|---|---|
+| Timeouts de `storePattern` | `hooks/reasoningbank.test.ts` |
+| `ruvector-plugins` no expone `name` en los plugins | `plugins/examples/ruvector-plugins/ruvector-plugins.test.ts` |
+| JSON malformado (`Expected property name at position 4`) | 3 archivos del CLI |
+| Mock de `fs` sin `openSync` | 2 archivos del CLI |
+| Contrato TOML: falta `[mcp_servers.ruflo]` | `codex/tests/migrations.test.ts` ← **decisión humana** |
+| Guardrail ADR-311 "zero local promo content" | `cli/__tests__/funnel.test.ts` ← **decisión humana** |
+| Resto (consensus, topology, docker, pq-validation, etc.) | ~10 sueltos |
+
+Lista completa: `agenticow-tools`, `funnel`, `helper-signing`, `hook-handler-artifact-parity`,
+`integration-docker`, `mcp-tools-deep`, `memory-search-recall-2558`, `neural-router`,
+`pq-validation`, `sona-embeddings-validation`, `statusline-cost-display` (CLI);
+`generators`, `migrations` (codex); `guidance-provider`, `reasoningbank` (hooks);
+`ruvector-plugins`; `consensus`, `topology` (swarm); `swarm-integration`.
+
+Pendiente además: **1 CVE HIGH/CRITICAL sin aceptar** en `v3/@claude-flow/browser`,
+detectado por `audit-supply-chain` (sale exit 1). Y las **9 fallas genuinas** de
+`npm run test:node`.
+
+### Efecto colateral conocido (Fase 2.2, sin resolver)
+
+La corrida de tests escribe en el árbol de trabajo: modifica `agentdb.rvf.lock` y crea
+`test-database-provider.rvf`. Hay que aislarlo (tmpdir o fixture) para que `git status`
+quede limpio tras testear.
+
 ## Próximo paso
 
-Fase 0 y Fase 1 completas. Queda pendiente de aprobación humana entrar a **Fase 2 — Tests en verde**, que parte de la clasificación ya hecha en la línea base (27 archivos del fork `ruvocal`, ~12 archivos `node:test` mal barridos, 41 archivos con fallas genuinas) — varios de esos 41 deberían resolverse solos ahora que el build del CLI y el bug de `ruvector-plugins` están arreglados.
+Fase 0, Fase 1 y Fase 2 parcial (2.1 + 2.3a/b/c) completas y commiteadas en
+`github.com/mmillasm/ruflo`. Queda: triage de los 19 archivos restantes, las 9 fallas de
+`test:node`, el CVE de `@claude-flow/browser`, y Fase 2.2 (aislar escrituras al árbol).
+Los dos casos marcados **decisión humana** (`funnel.test.ts`, `migrations.test.ts`)
+necesitan definir cuál lado del contrato es el correcto antes de tocar código.
