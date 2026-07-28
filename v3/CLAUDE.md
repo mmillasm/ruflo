@@ -13,7 +13,19 @@ pnpm install
 # From v3/@claude-flow/<package> — build/test a single package
 pnpm --filter @claude-flow/<package> build
 pnpm --filter @claude-flow/<package> test
+
+# Building the CLI: use the trailing "..." so pnpm builds its workspace
+# dependencies first, in topological order.
+pnpm --filter @claude-flow/cli... build
 ```
+
+Building `@claude-flow/cli` on its own is NOT enough. It imports
+`@claude-flow/cli-core` at runtime (e.g. `cli-core/dist/src/output.js`), and a
+bare `pnpm --filter @claude-flow/cli build` leaves `cli-core/dist` missing — the
+CLI then dies with `ERR_MODULE_NOT_FOUND` on almost every command. This is not
+hypothetical: it accounted for 8 failing test files until 2026-07-28, because
+those tests shell out to `bin/cli.js`. The `...` suffix (or a plain
+`pnpm -r build`) is what keeps the dependency built.
 
 ## Packages
 
