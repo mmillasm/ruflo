@@ -114,6 +114,10 @@ export class SemanticCodeSearch {
     const safeContent = Security.validateString(content, { maxLength: 1_000_000 });
     const safeLang = Security.validateString(language, { maxLength: 50 });
 
+    if (safePath === null || safeContent === null || safeLang === null) {
+      throw new Error('Invalid indexFile arguments: filePath, content, and language must be non-empty strings within their length limits.');
+    }
+
     await this.removeFile(safePath);
 
     const chunks = this.chunkCode(safeContent, safeLang, safePath);
@@ -153,6 +157,9 @@ export class SemanticCodeSearch {
     const db = await this.ensureInitialized();
 
     const safeQuery = Security.validateString(query, { maxLength: 1000 });
+    if (safeQuery === null) {
+      throw new Error('Invalid query: must be a non-empty string up to 1000 characters.');
+    }
     const k = options?.k ?? 10;
     const minSimilarity = options?.minSimilarity ?? 0.3;
 
@@ -197,6 +204,9 @@ export class SemanticCodeSearch {
     const db = await this.ensureInitialized();
 
     const safeCode = Security.validateString(code, { maxLength: 10000 });
+    if (safeCode === null) {
+      throw new Error('Invalid code snippet: must be a non-empty string up to 10000 characters.');
+    }
     const embedding = this.generateCodeEmbedding(safeCode);
     const searchResults = db.search(embedding, k);
 

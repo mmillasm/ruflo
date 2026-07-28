@@ -36,8 +36,7 @@ export class AgentDBAdapter implements MemoryAdapter {
     const { AgentDBBackend } = await import('../../../src/agentdb-backend.js');
 
     this.db = new AgentDBBackend({
-      storagePath: '.longmemeval-bench',
-      enableHNSW: true,
+      dbPath: '.longmemeval-bench',
       hnswM: this.config.hnswM,
       hnswEfConstruction: 200,
       hnswEfSearch: this.config.hnswEfSearch,

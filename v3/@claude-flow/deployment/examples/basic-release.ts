@@ -7,7 +7,7 @@
  * 3. Publish to npm
  */
 
-import { Validator, ReleaseManager, Publisher } from '@claude-flow/deployment';
+import { Validator, ReleaseManager, Publisher } from '../src/index.js';
 
 async function basicRelease() {
   console.log('Starting release workflow...\n');

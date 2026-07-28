@@ -2,9 +2,16 @@
 resolver = "2"
 members = [
   "v3/crates/ruflo-federation-peer",
+]
+exclude = [
   "v3/plugins/gastown-bridge",
 ]
 
 # ruflo is primarily TypeScript; this workspace manifest exists so the
 # repo-scorecard analyzer sees ruflo's Rust components (federation peer
 # binary, gastown-bridge plugin) without traversing deep subdirs.
+#
+# gastown-bridge is excluded rather than a member: it declares its own
+# independent [workspace] (wasm/gastown-formula-wasm, wasm/ruvector-gnn-wasm)
+# and Cargo rejects a member that is itself a workspace root
+# ("multiple workspace roots found in the same workspace").

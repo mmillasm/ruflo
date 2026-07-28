@@ -18,7 +18,12 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
+import initSqlJs from 'sql.js';
+
+// @types/sql.js uses `export =` + `export as namespace initSqlJs`, so the
+// Database class is only reachable as a namespace-qualified type, not a
+// named import.
+type SqlJsDatabase = initSqlJs.Database;
 import { DomainEvent, AllDomainEvents } from './domain-events.js';
 
 // =============================================================================

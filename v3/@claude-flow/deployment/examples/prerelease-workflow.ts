@@ -4,7 +4,7 @@
  * Demonstrates publishing alpha/beta/rc versions
  */
 
-import { prepareRelease, publishToNpm } from '@claude-flow/deployment';
+import { prepareRelease, publishToNpm } from '../src/index.js';
 
 async function prereleaseWorkflow() {
   console.log('Prerelease Workflow\n');

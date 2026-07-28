@@ -4,9 +4,9 @@
 
 export {
   // Interfaces
-  IVectorDB,
-  ILoRAEngine,
-  LoRAAdapter,
+  type IVectorDB,
+  type ILoRAEngine,
+  type LoRAAdapter,
   // Fallback implementations
   FallbackVectorDB,
   FallbackLoRAEngine,

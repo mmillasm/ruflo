@@ -9,7 +9,10 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type Database from 'better-sqlite3';
+// better-sqlite3's types merge a `const Database` (constructor) with a
+// `namespace Database` (exposing Database.Database as the instance type) —
+// needs a value import (not `import type`) for that merge to resolve.
+import Database from 'better-sqlite3';
 import { safeJsonParse } from './json-security.js';
 
 type DatabaseCtor = typeof Database;

@@ -118,6 +118,9 @@ export class ReasoningBank {
 
     // Validate inputs
     const safeProblem = Security.validateString(trajectory.problem, { maxLength: 10000 });
+    if (safeProblem === null) {
+      throw new Error('Invalid trajectory.problem: must be a non-empty string up to 10000 characters.');
+    }
 
     // Generate embedding from problem + steps
     const embedding = trajectory.problemEmbedding ?? this.generateEmbedding(safeProblem);
@@ -162,6 +165,9 @@ export class ReasoningBank {
     const minScore = options?.minScore ?? 0.5;
 
     const safeProblem = Security.validateString(problem, { maxLength: 10000 });
+    if (safeProblem === null) {
+      throw new Error('Invalid problem: must be a non-empty string up to 10000 characters.');
+    }
     const queryEmbedding = this.generateEmbedding(safeProblem);
 
     // HNSW search - sub-millisecond for 10K+ vectors

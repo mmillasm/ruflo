@@ -128,6 +128,10 @@ export class IntentRouter {
     const safePattern = Security.validateString(pattern, { maxLength: 500 });
     const safeCategory = Security.validateString(category, { maxLength: 100 });
 
+    if (safePattern === null || safeCategory === null) {
+      throw new Error('Invalid intent registration: pattern and category must be non-empty strings within their length limits.');
+    }
+
     const id = `intent-${this.nextId++}`;
     const examples = options?.examples ?? [];
     const allText = [safePattern, ...examples].join(' ');
@@ -156,6 +160,9 @@ export class IntentRouter {
     const db = await this.ensureInitialized();
 
     const safeQuery = Security.validateString(query, { maxLength: 1000 });
+    if (safeQuery === null) {
+      throw new Error('Invalid query: must be a non-empty string up to 1000 characters.');
+    }
     const queryEmbedding = this.generateEmbedding(safeQuery);
     const searchResults = db.search(queryEmbedding, this.config.maxAlternatives + 1);
 

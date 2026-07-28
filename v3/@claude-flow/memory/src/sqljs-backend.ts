@@ -9,7 +9,12 @@
 
 import { EventEmitter } from 'node:events';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
+import initSqlJs from 'sql.js';
+
+// @types/sql.js uses `export =` + `export as namespace initSqlJs`, so the
+// Database class is only reachable as a namespace-qualified type, not a
+// named import.
+type SqlJsDatabase = initSqlJs.Database;
 import { safeJsonParse } from './json-security.js';
 import {
   IMemoryBackend,

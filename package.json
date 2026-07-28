@@ -46,7 +46,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "build:ts": "cd v3/@claude-flow/cli && npm run build || true",
+    "build:ts": "cd v3/@claude-flow/cli && npm run build",
     "prepublishOnly": "node scripts/prepare-root-publish.mjs",
     "test": "vitest",
     "test:ui": "vitest --ui",

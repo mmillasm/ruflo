@@ -24,9 +24,9 @@ import { HttpTransport, HttpTransportConfig, createHttpTransport } from './http.
 import { WebSocketTransport, WebSocketTransportConfig, createWebSocketTransport } from './websocket.js';
 
 // Re-export transport classes
-export { StdioTransport, StdioTransportConfig } from './stdio.js';
-export { HttpTransport, HttpTransportConfig } from './http.js';
-export { WebSocketTransport, WebSocketTransportConfig } from './websocket.js';
+export { StdioTransport, type StdioTransportConfig } from './stdio.js';
+export { HttpTransport, type HttpTransportConfig } from './http.js';
+export { WebSocketTransport, type WebSocketTransportConfig } from './websocket.js';
 
 /**
  * Transport configuration union

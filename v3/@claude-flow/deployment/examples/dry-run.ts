@@ -4,7 +4,7 @@
  * Test release without making actual changes
  */
 
-import { prepareRelease, publishToNpm, validate } from '@claude-flow/deployment';
+import { prepareRelease, publishToNpm, validate } from '../src/index.js';
 
 async function dryRunRelease() {
   console.log('Dry Run Mode - Testing release without changes\n');

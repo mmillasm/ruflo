@@ -158,6 +158,12 @@ export class HookPatternLibrary {
     const safeFileType = Security.validateString(fileType, { maxLength: 50 });
     const safeOperation = Security.validateString(operation, { maxLength: 50 });
 
+    if (safeHookName === null || safeFileType === null || safeOperation === null) {
+      throw new Error(
+        'Invalid hook execution parameters: hookName, fileType, and operation must be non-empty strings within their length limits.'
+      );
+    }
+
     // Find existing pattern or create new
     let pattern = Array.from(this.patterns.values()).find(
       p => p.hookName === safeHookName && p.event === event
@@ -220,6 +226,10 @@ export class HookPatternLibrary {
 
     const safeFileType = Security.validateString(fileType, { maxLength: 50 });
     const safeOperation = Security.validateString(operation, { maxLength: 50 });
+
+    if (safeFileType === null || safeOperation === null) {
+      throw new Error('Invalid pattern lookup parameters: fileType and operation must be non-empty strings within their length limits.');
+    }
 
     const queryEmbedding = this.generateEmbedding('', HookEvent.PreFileWrite, [safeFileType], [safeOperation]);
     const searchResults = db.search(queryEmbedding, k * 2);
@@ -439,7 +449,7 @@ export const hookPatternLibraryPlugin = new PluginBuilder('hook-pattern-library'
       .build(),
   ])
   .withHooks([
-    new HookBuilder(HookEvent.PostToolCall)
+    new HookBuilder(HookEvent.PostToolUse)
       .withName('hook-auto-record')
       .withDescription('Auto-record hook executions')
       .withPriority(HookPriority.Deferred)

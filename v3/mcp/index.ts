@@ -24,66 +24,66 @@
 // Core types
 export {
   // Protocol types
-  JsonRpcVersion,
-  RequestId,
-  MCPMessage,
-  MCPRequest,
-  MCPResponse,
-  MCPNotification,
-  MCPError,
+  type JsonRpcVersion,
+  type RequestId,
+  type MCPMessage,
+  type MCPRequest,
+  type MCPResponse,
+  type MCPNotification,
+  type MCPError,
 
   // Server configuration
-  TransportType,
-  AuthMethod,
-  AuthConfig,
-  LoadBalancerConfig,
-  ConnectionPoolConfig,
-  MCPServerConfig,
+  type TransportType,
+  type AuthMethod,
+  type AuthConfig,
+  type LoadBalancerConfig,
+  type ConnectionPoolConfig,
+  type MCPServerConfig,
 
   // Session types
-  SessionState,
-  MCPSession,
-  MCPClientInfo,
+  type SessionState,
+  type MCPSession,
+  type MCPClientInfo,
 
   // Capability types
-  MCPCapabilities,
-  MCPProtocolVersion,
-  MCPInitializeParams,
-  MCPInitializeResult,
+  type MCPCapabilities,
+  type MCPProtocolVersion,
+  type MCPInitializeParams,
+  type MCPInitializeResult,
 
   // Tool types
-  JSONSchema,
-  ToolContext,
-  ToolHandler,
-  MCPTool,
-  ToolCallResult,
-  ToolRegistrationOptions,
+  type JSONSchema,
+  type ToolContext,
+  type ToolHandler,
+  type MCPTool,
+  type ToolCallResult,
+  type ToolRegistrationOptions,
 
   // Transport types
-  RequestHandler,
-  NotificationHandler,
-  TransportHealthStatus,
-  ITransport,
+  type RequestHandler,
+  type NotificationHandler,
+  type TransportHealthStatus,
+  type ITransport,
 
   // Connection pool types
-  ConnectionState,
-  PooledConnection,
-  ConnectionPoolStats,
-  IConnectionPool,
+  type ConnectionState,
+  type PooledConnection,
+  type ConnectionPoolStats,
+  type IConnectionPool,
 
   // Metrics types
-  ToolCallMetrics,
-  MCPServerMetrics,
-  SessionMetrics,
+  type ToolCallMetrics,
+  type MCPServerMetrics,
+  type SessionMetrics,
 
   // Event types
-  MCPEventType,
-  MCPEvent,
-  EventHandler,
+  type MCPEventType,
+  type MCPEvent,
+  type EventHandler,
 
   // Logger
-  LogLevel,
-  ILogger,
+  type LogLevel,
+  type ILogger,
 
   // Error handling
   ErrorCodes,
@@ -93,7 +93,7 @@ export {
 // Server
 export {
   MCPServer,
-  IMCPServer,
+  type IMCPServer,
   createMCPServer,
 } from './server.js';
 
@@ -107,7 +107,7 @@ export {
 // Session Manager
 export {
   SessionManager,
-  SessionConfig,
+  type SessionConfig,
   createSessionManager,
 } from './session-manager.js';
 
@@ -124,17 +124,20 @@ export {
   createInProcessTransport,
   TransportManager,
   createTransportManager,
-  TransportConfig,
+  type TransportConfig,
   DEFAULT_TRANSPORT_CONFIGS,
 
   // Specific transports
   StdioTransport,
-  StdioTransportConfig,
+  type StdioTransportConfig,
   HttpTransport,
-  HttpTransportConfig,
+  type HttpTransportConfig,
   WebSocketTransport,
-  WebSocketTransportConfig,
+  type WebSocketTransportConfig,
 } from './transport/index.js';
+
+import type { MCPServerConfig, ILogger } from './types.js';
+import { MCPServer, createMCPServer } from './server.js';
 
 /**
  * Quick start function to create and configure an MCP server

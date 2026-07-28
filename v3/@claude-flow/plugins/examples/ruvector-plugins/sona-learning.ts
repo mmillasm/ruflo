@@ -132,6 +132,12 @@ export class SONALearning {
     const safeAction = Security.validateString(action, { maxLength: 1000 });
     const safeQuality = Security.validateNumber(quality, { min: 0, max: 1 });
 
+    if (safeCategory === null || safeTrigger === null || safeAction === null || safeQuality === null) {
+      throw new Error(
+        'Invalid learn() arguments: category, trigger, and action must be non-empty strings within their length limits, and quality must be a number between 0 and 1.'
+      );
+    }
+
     const id = `pattern-${this.nextId++}`;
     const embedding = this.generatePatternEmbedding(safeTrigger, safeAction, safeCategory);
 
@@ -160,8 +166,8 @@ export class SONALearning {
     const gradient = lora.computeGradient(embedding, target);
     await lora.updateAdapter(adapter.id, gradient, this.config.learningRate);
 
-    // Apply EWC++ to prevent catastrophic forgetting
-    await lora.applyEWC(adapter.id, this.config.ewcLambda);
+    // Apply EWC++ to prevent catastrophic forgetting (optional on the LoRA engine interface)
+    await lora.applyEWC?.(adapter.id, this.config.ewcLambda);
 
     // Store in vector DB
     db.insert(embedding, id, { category: safeCategory, quality: safeQuality });
@@ -185,6 +191,9 @@ export class SONALearning {
     const { db } = await this.ensureInitialized();
 
     const safeTrigger = Security.validateString(trigger, { maxLength: 1000 });
+    if (safeTrigger === null) {
+      throw new Error('Invalid trigger: must be a non-empty string up to 1000 characters.');
+    }
     const queryEmbedding = this.generatePatternEmbedding(safeTrigger, '', category || '');
     const searchResults = db.search(queryEmbedding, k * 2);
 
