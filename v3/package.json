@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "description": "Claude Flow V3 - Modular AI Agent Coordination System",
-  "workspaces": [
-    "@claude-flow/*",
-    "claude-flow"
-  ],
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run",

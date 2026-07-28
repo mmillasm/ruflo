@@ -178,6 +178,15 @@ v3/@claude-flow/cli/plugins/
 .claude/helpers/.helpers-version
 .claude/helpers/helpers.manifest.json
 
-# Runtime proven-config adoption state (per-install, not source)
+# Runtime proven-config adoption state (per-install, not source). The
+# unscoped root entries are kept for existing tooling; **/ variants cover
+# the same generated state under nested packages (e.g.
+# v3/@claude-flow/cli/.claude/), which weren't previously matched.
 .claude/proven-config.json
 .claude/.proven-config-version
+**/.claude/proven-config.json
+**/.claude/.proven-config-version
+
+# Cargo build output (v3/crates/ruflo-federation-peer) — pure generated
+# artifact, never source.
+/target/

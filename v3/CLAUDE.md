@@ -4,9 +4,15 @@ This directory contains the V3 monorepo packages. Root CLAUDE.md rules apply her
 
 ## Build & Test
 
+pnpm is the canonical package manager for `v3/` (see `pnpm-workspace.yaml` + the committed `pnpm-lock.yaml`). A plain `npm install` from `v3/` root fails with `EUNSUPPORTEDPROTOCOL` because two packages (`@claude-flow/plugin-agent-federation`, `@claude-flow/plugin-iot-cognitum`) use the `workspace:*` protocol, which only pnpm resolves.
+
 ```bash
-# From v3/@claude-flow/<package>
-npm install && npm run build && npm test
+# From v3/ — installs and links the whole workspace
+pnpm install
+
+# From v3/@claude-flow/<package> — build/test a single package
+pnpm --filter @claude-flow/<package> build
+pnpm --filter @claude-flow/<package> test
 ```
 
 ## Packages
